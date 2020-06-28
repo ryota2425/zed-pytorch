@@ -11,6 +11,71 @@ import torch
 import pyzed.sl as sl
 import numpy as np
 import math
+from threading import Lock, Thread
+
+
+# ZED image capture thread function
+def capture_thread_func(svo_filename=None):
+    global image_np_global, depth_np_global, exit_signal, new_data
+    init_cap_params = sl.InitParameters()
+    if svo_filename:
+        print("Loading SVO file " + args.svo_filename)
+        init_cap_params.set_from_svo_file(args.svo_filename)
+        init_cap_params.svo_real_time_mode = True
+    init_cap_params.camera_resolution = sl.RESOLUTION.HD720
+    init_cap_params.depth_mode = sl.DEPTH_MODE.ULTRA
+    init_cap_params.coordinate_units = sl.UNIT.METER
+    init_cap_params.depth_stabilization = True
+    init_cap_params.camera_image_flip = False
+    init_cap_params.coordinate_system = sl.COORDINATE_SYSTEM.RIGHT_HANDED_Y_UP
+
+    cap = sl.Camera()
+    if not cap.is_opened():
+        print("Opening ZED Camera...!")
+    status = cap.open(init_cap_params)
+    if status != sl.ERROR_CODE.SUCCESS:
+        print(repr(status))
+        exit()
+
+    display = True
+    runtime = sl.RuntimeParameters()
+    left = sl.Mat()
+    ptcloud = sl.Mat()
+    depth_img = sl.Mat()
+    depth = sl.Mat()
+
+    res = sl.Resolution(1280, 720)
+
+    py_transform = sl.Transform()  # First create a Transform object for TrackingParameters object
+    tracking_parameters = sl.PositionalTrackingParameters(init_pos=py_transform)
+    tracking_parameters.set_as_static = True
+    err = cap.enable_positional_tracking(tracking_parameters)
+    if err != sl.ERROR_CODE.SUCCESS:
+        exit(1)
+
+    running = True
+    keep_people_only = False
+
+    if coco_demo.cfg.MODEL.MASK_ON:
+        print("Mask enabled!!")
+    if coco_demo.cfg.MODEL.KEYPOINT_ON:
+        print("Keypoints enabled!")
+
+    while running:
+        start_time = time.time()
+        err_code = cap.grab(runtime)
+        if err_code != sl.ERROR_CODE.SUCCESS:
+            break
+
+        cap.retrieve_image(left, sl.VIEW.LEFT, resolution=res)
+        cap.retrieve_image(depth_img, sl.VIEW.DEPTH, resolution=res)
+        cap.retrieve_measure(depth, sl.MEASURE.DEPTH, resolution=res)
+        cap.retrieve_measure(ptcloud, sl.MEASURE.XYZ, resolution=res)
+        ptcloud_np = np.array(ptcloud.get_data())
+
+        image_np_global = cv2.cvtColor(left.get_data(), cv2.COLOR_RGBA2RGB)
+        time.sleep(0.5)
+
 
 
 def get_humans3d(prediction, depth):
@@ -156,6 +221,12 @@ def overlay_distances(prediction, boxes_3d, image, skeletons_3d=None, masks_3d=N
         image = cv2.putText(image, str(str("{0:.2f}".format(round(dist, 2))) + " m"), (i, j),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
 
+image_np_global = None
+depth_np_global = None
+lock = Lock()
+
+exit_signal = False
+new_data = False
 
 def main():
     print("version 3.0")
@@ -218,69 +289,16 @@ def main():
         masks_per_dim=args.masks_per_dim,
         min_image_size=args.min_image_size,
     )
-
-    init_cap_params = sl.InitParameters()
-    if args.svo_filename:
-        print("Loading SVO file " + args.svo_filename)
-        init_cap_params.set_from_svo_file(args.svo_filename)
-        init_cap_params.svo_real_time_mode = True
-    init_cap_params.camera_resolution = sl.RESOLUTION.HD720
-    init_cap_params.depth_mode = sl.DEPTH_MODE.ULTRA
-    init_cap_params.coordinate_units = sl.UNIT.METER
-    init_cap_params.depth_stabilization = True
-    init_cap_params.camera_image_flip = False
-    init_cap_params.coordinate_system = sl.COORDINATE_SYSTEM.RIGHT_HANDED_Y_UP
-
-    cap = sl.Camera()
-    if not cap.is_opened():
-        print("Opening ZED Camera...!")
-    status = cap.open(init_cap_params)
-    if status != sl.ERROR_CODE.SUCCESS:
-        print(repr(status))
-        exit()
-
-    display = True
-    runtime = sl.RuntimeParameters()
-    left = sl.Mat()
-    ptcloud = sl.Mat()
-    depth_img = sl.Mat()
-    depth = sl.Mat()
-
-    res = sl.Resolution(1280, 720)
-
-    py_transform = sl.Transform()  # First create a Transform object for TrackingParameters object
-    tracking_parameters = sl.PositionalTrackingParameters(init_pos=py_transform)
-    tracking_parameters.set_as_static = True
-    err = cap.enable_positional_tracking(tracking_parameters)
-    if err != sl.ERROR_CODE.SUCCESS:
-        exit(1)
-
-    running = True
-    keep_people_only = False
-
-    if coco_demo.cfg.MODEL.MASK_ON:
-        print("Mask enabled!!")
-    if coco_demo.cfg.MODEL.KEYPOINT_ON:
-        print("Keypoints enabled!")
-    start_time = time.time()
-    while running:
-        print(" LastTime-ThisTime: {:.2f} s".format(time.time() - start_time))
-        start_time = time.time()
-        err_code = cap.grab(runtime)
-        if err_code != sl.ERROR_CODE.SUCCESS:
-            break
-
-        cap.retrieve_image(left, sl.VIEW.LEFT, resolution=res)
-        cap.retrieve_image(depth_img, sl.VIEW.DEPTH, resolution=res)
-        cap.retrieve_measure(depth, sl.MEASURE.DEPTH, resolution=res)
-        cap.retrieve_measure(ptcloud, sl.MEASURE.XYZ, resolution=res)
-        ptcloud_np = np.array(ptcloud.get_data())
-
-        img = cv2.cvtColor(left.get_data(), cv2.COLOR_RGBA2RGB)
-        print(" ImagegetTime: {:.2f} s".format(time.time() - start_time))
-        prediction = coco_demo.select_top_predictions(coco_demo.compute_prediction(img))
-        print(" predictionTime: {:.2f} s".format(time.time() - start_time))
-
+    
+    global image_np_global, depth_np_global, new_data, exit_signal
+    #
+    capture_thread = Thread(target=capture_thread_func, kwargs={'svo_filename': args.svo_filename})
+    capture_thread.start()
+    time.sleep(10)
+    while True:
+        lock.acquire()
+        prediction = coco_demo.select_top_predictions(coco_demo.compute_prediction(image_np_global))
+        lock.release()
         # Keep people only
         if keep_people_only:
             labels_tmp = prediction.get_field("labels")
@@ -295,20 +313,21 @@ def main():
             composite = coco_demo.create_mask_montage(composite, prediction)
         composite = coco_demo.overlay_boxes(composite, prediction)
         if coco_demo.cfg.MODEL.MASK_ON:
+            lock.acquire()
             masks_3d = get_masks3d(prediction, depth)
+            lock.release()
             #maskimage = showimage(prediction, depth)
             composite = coco_demo.overlay_mask(composite, prediction,masks_3d)
         if coco_demo.cfg.MODEL.KEYPOINT_ON:
             # Extract 3D skeleton from the ZED depth
             humans_3d = get_humans3d(prediction, ptcloud_np)
             composite = coco_demo.overlay_keypoints(composite, prediction)
-            print(" 3DpredictTime: {:.2f} s".format(time.time() - start_time))
         if True:
             #print(masks_3d)
             overlay_distances(prediction, get_boxes3d(prediction, ptcloud_np), composite, humans_3d, masks_3d)
             composite = coco_demo.overlay_class_names(composite, prediction)
 
-        print(" TotalTime: {:.2f} s".format(time.time() - start_time))
+        print(" Time: {:.2f} s".format(time.time() - start_time))
 
         if display:
             cv2.imshow("COCO detections", composite)
@@ -316,7 +335,9 @@ def main():
             cv2.imshow("ZED Depth", depth_img.get_data())
             key = cv2.waitKey(10)
             if key == 27:
-                break  # esc to quit
+                cv2.destroyAllWindows()
+                #break  #toDO esc to quit
+    capture_thread.join()
 
 if __name__ == "__main__":
     main()

@@ -11,6 +11,7 @@ import torch
 import pyzed.sl as sl
 import numpy as np
 import math
+from threading import Lock, Thread
 
 
 def get_humans3d(prediction, depth):
@@ -156,68 +157,110 @@ def overlay_distances(prediction, boxes_3d, image, skeletons_3d=None, masks_3d=N
         image = cv2.putText(image, str(str("{0:.2f}".format(round(dist, 2))) + " m"), (i, j),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
 
+def sendData_thred(prediction,img,ptcloud_np,depth_img,depth,start_time):
+    display = True
+# Keep people only
+    if keep_people_only:
+        labels_tmp = prediction.get_field("labels")
+        people_coco_label = 1
+        keep = torch.nonzero(labels_tmp == people_coco_label).squeeze(1)
+        prediction = prediction[keep]
+
+    composite = img.copy()
+    humans_3d = None
+    masks_3d = None
+    if coco_demo.show_mask_heatmaps:
+        composite = coco_demo.create_mask_montage(composite, prediction)
+    composite = coco_demo.overlay_boxes(composite, prediction)
+    if coco_demo.cfg.MODEL.MASK_ON:
+        masks_3d = get_masks3d(prediction, depth)
+        #maskimage = showimage(prediction, depth)
+        composite = coco_demo.overlay_mask(composite, prediction,masks_3d)
+    if coco_demo.cfg.MODEL.KEYPOINT_ON:
+        # Extract 3D skeleton from the ZED depth
+        humans_3d = get_humans3d(prediction, ptcloud_np)
+        composite = coco_demo.overlay_keypoints(composite, prediction)
+        print(" 3DpredictTime: {:.2f} s".format(time.time() - start_time))
+    if True:
+        #print(masks_3d)
+        overlay_distances(prediction, get_boxes3d(prediction, ptcloud_np), composite, humans_3d, masks_3d)
+        composite = coco_demo.overlay_class_names(composite, prediction)
+
+    print(" TotalTime: {:.2f} s".format(time.time() - start_time))
+
+    if display:
+        cv2.imshow("COCO detections", composite)
+        #cv2.imshow("mask",maskimage[0])
+        cv2.imshow("ZED Depth", depth_img.get_data())
+        key = cv2.waitKey(10)
+        if key == 27:
+            cv2.destroyAllWindows()
+            #break  # esc to quit
+    
+parser = argparse.ArgumentParser(description="PyTorch Object Detection Webcam Demo")
+parser.add_argument(
+    "--config-file",
+    default="configs/caffe2/e2e_mask_rcnn_X_101_32x8d_FPN_1x_caffe2.yaml",
+    metavar="FILE",
+    help="path to config file",
+)
+parser.add_argument(
+    "--confidence-threshold",
+    type=float,
+    default=0.6,
+    help="Minimum score for the prediction to be shown",
+)
+parser.add_argument(
+    "--min-image-size",
+    type=int,
+    default=256,
+    help="Smallest size of the image to feed to the model. "
+        "Model was trained with 800, which gives best results",
+)
+parser.add_argument(
+    "--show-mask-heatmaps",
+    dest="show_mask_heatmaps",
+    help="Show a heatmap probability for the top masks-per-dim masks",
+    action="store_true",
+)
+parser.add_argument(
+    "--masks-per-dim",
+    type=int,
+    default=2,
+    help="Number of heatmaps per dimension to show",
+)
+parser.add_argument(
+    "opts",
+    help="Modify model config options using the command-line",
+    default=None,
+    nargs=argparse.REMAINDER,
+)
+parser.add_argument(
+    "--svo-filename",
+    help="Optional SVO input filepath",
+    default=None
+)
+running = True
+keep_people_only = False
+args = parser.parse_args()
+# load config from file and command-line arguments
+cfg.merge_from_file(args.config_file)
+cfg.merge_from_list(args.opts)
+cfg.freeze()
+# prepare object that handles inference plus adds predictions on top of image
+coco_demo = COCODemo(
+    cfg,
+    confidence_threshold=args.confidence_threshold,
+    show_mask_heatmaps=args.show_mask_heatmaps,
+    masks_per_dim=args.masks_per_dim,
+    min_image_size=args.min_image_size,
+)
 
 def main():
+    global running, keep_people_only, coco_demo, args
     print("version 3.0")
-    parser = argparse.ArgumentParser(description="PyTorch Object Detection Webcam Demo")
-    parser.add_argument(
-        "--config-file",
-        default="configs/caffe2/e2e_mask_rcnn_X_101_32x8d_FPN_1x_caffe2.yaml",
-        metavar="FILE",
-        help="path to config file",
-    )
-    parser.add_argument(
-        "--confidence-threshold",
-        type=float,
-        default=0.6,
-        help="Minimum score for the prediction to be shown",
-    )
-    parser.add_argument(
-        "--min-image-size",
-        type=int,
-        default=256,
-        help="Smallest size of the image to feed to the model. "
-            "Model was trained with 800, which gives best results",
-    )
-    parser.add_argument(
-        "--show-mask-heatmaps",
-        dest="show_mask_heatmaps",
-        help="Show a heatmap probability for the top masks-per-dim masks",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--masks-per-dim",
-        type=int,
-        default=2,
-        help="Number of heatmaps per dimension to show",
-    )
-    parser.add_argument(
-        "opts",
-        help="Modify model config options using the command-line",
-        default=None,
-        nargs=argparse.REMAINDER,
-    )
-    parser.add_argument(
-        "--svo-filename",
-        help="Optional SVO input filepath",
-        default=None
-    )
+   
 
-    args = parser.parse_args()
-
-    # load config from file and command-line arguments
-    cfg.merge_from_file(args.config_file)
-    cfg.merge_from_list(args.opts)
-    cfg.freeze()
-
-    # prepare object that handles inference plus adds predictions on top of image
-    coco_demo = COCODemo(
-        cfg,
-        confidence_threshold=args.confidence_threshold,
-        show_mask_heatmaps=args.show_mask_heatmaps,
-        masks_per_dim=args.masks_per_dim,
-        min_image_size=args.min_image_size,
-    )
 
     init_cap_params = sl.InitParameters()
     if args.svo_filename:
@@ -239,7 +282,7 @@ def main():
         print(repr(status))
         exit()
 
-    display = True
+    
     runtime = sl.RuntimeParameters()
     left = sl.Mat()
     ptcloud = sl.Mat()
@@ -263,6 +306,7 @@ def main():
     if coco_demo.cfg.MODEL.KEYPOINT_ON:
         print("Keypoints enabled!")
     start_time = time.time()
+
     while running:
         print(" LastTime-ThisTime: {:.2f} s".format(time.time() - start_time))
         start_time = time.time()
@@ -280,43 +324,11 @@ def main():
         print(" ImagegetTime: {:.2f} s".format(time.time() - start_time))
         prediction = coco_demo.select_top_predictions(coco_demo.compute_prediction(img))
         print(" predictionTime: {:.2f} s".format(time.time() - start_time))
+        ##ここからスレッド
+        capture_thread = Thread(target=sendData_thred, kwargs={'prediction': prediction,'img': img,'ptcloud_np': ptcloud_np,'depth_img': depth_img,'depth': depth,'start_time': start_time})
+        capture_thread.start()
 
-        # Keep people only
-        if keep_people_only:
-            labels_tmp = prediction.get_field("labels")
-            people_coco_label = 1
-            keep = torch.nonzero(labels_tmp == people_coco_label).squeeze(1)
-            prediction = prediction[keep]
-
-        composite = img.copy()
-        humans_3d = None
-        masks_3d = None
-        if coco_demo.show_mask_heatmaps:
-            composite = coco_demo.create_mask_montage(composite, prediction)
-        composite = coco_demo.overlay_boxes(composite, prediction)
-        if coco_demo.cfg.MODEL.MASK_ON:
-            masks_3d = get_masks3d(prediction, depth)
-            #maskimage = showimage(prediction, depth)
-            composite = coco_demo.overlay_mask(composite, prediction,masks_3d)
-        if coco_demo.cfg.MODEL.KEYPOINT_ON:
-            # Extract 3D skeleton from the ZED depth
-            humans_3d = get_humans3d(prediction, ptcloud_np)
-            composite = coco_demo.overlay_keypoints(composite, prediction)
-            print(" 3DpredictTime: {:.2f} s".format(time.time() - start_time))
-        if True:
-            #print(masks_3d)
-            overlay_distances(prediction, get_boxes3d(prediction, ptcloud_np), composite, humans_3d, masks_3d)
-            composite = coco_demo.overlay_class_names(composite, prediction)
-
-        print(" TotalTime: {:.2f} s".format(time.time() - start_time))
-
-        if display:
-            cv2.imshow("COCO detections", composite)
-            #cv2.imshow("mask",maskimage[0])
-            cv2.imshow("ZED Depth", depth_img.get_data())
-            key = cv2.waitKey(10)
-            if key == 27:
-                break  # esc to quit
+        
 
 if __name__ == "__main__":
     main()
