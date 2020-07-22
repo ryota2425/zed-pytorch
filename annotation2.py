@@ -158,7 +158,8 @@ def overlay_distances(prediction, boxes_3d, image, skeletons_3d=None, masks_3d=N
 
 
 def main():
-    print("version 3.0")
+    print("version 4.0")
+    #print("")
     parser = argparse.ArgumentParser(description="PyTorch Object Detection Webcam Demo")
     parser.add_argument(
         "--config-file",
@@ -230,6 +231,7 @@ def main():
     init_cap_params.depth_stabilization = True
     init_cap_params.camera_image_flip = False
     init_cap_params.coordinate_system = sl.COORDINATE_SYSTEM.RIGHT_HANDED_Y_UP
+    init_cap_params.depth_minimum_distance = 0.15
 
     cap = sl.Camera()
     if not cap.is_opened():

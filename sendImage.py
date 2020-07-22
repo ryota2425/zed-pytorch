@@ -13,7 +13,7 @@ def send_image(img):
   img_json = json.dumps({'image': img_byte}).encode('utf-8')
 
   # HTTPリクエストを送信
-  response = requests.post("http://192.168.11.12:8082/save", data=img_json)
+  response = requests.post("http://192.168.11.2:8082/save", data=img_json)
   #print('{0} {1}'.format(response.status_code, json.loads(response.text)["message"]))
 
 
@@ -27,7 +27,7 @@ def send_info(id,categories,ver,hor):
   sendjson["categories"] = categories
   outdata = json.dumps(sendjson)
   # HTTPリクエストを送信
-  response = requests.post("http://192.168.11.12:8082/Info", data=outdata)
+  response = requests.post("http://192.168.11.2:8082/Info", data=outdata)
   #print('{0} {1}'.format(response.status_code, json.loads(response.text)["message"]))
 
 if __name__ == '__main__':

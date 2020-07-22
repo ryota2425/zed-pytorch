@@ -51,7 +51,7 @@ class COCODemo(object):
     # COCO categories for pretty print
     CATEGORIES = [
         "__background",
-        "person",
+        "goldfish",
         "bicycle",
         "car",
         "motorcycle",
@@ -342,8 +342,8 @@ class COCODemo(object):
                thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE
             )
             image = cv2.drawContours(image, contours, -1, color, 3)
-
-            for i in range(0, len(contours)):
+            #-for i in range(0, len(contours)):
+            for i in range(0, 1):
                     if len(contours[i]) > 0:
                             # remove small objects
                      if cv2.contourArea(contours[i]) < 500: 
@@ -366,14 +366,15 @@ class COCODemo(object):
                      image = cv2.drawContours(image,[box],0,(0,0,255),2)
                      cv2.line(image, (rec1[0], rec1[1]), (rec3[0], rec3[1]), (255, 255, 255), thickness=2, lineType=cv2.LINE_AA)
                      cv2.line(image, (rec2[0], rec2[1]), (rec4[0], rec4[1]), (255, 255, 255), thickness=2, lineType=cv2.LINE_AA)
-                     pixel_realsize_x = mask_3d[i] / 1280 * 1.92
-                     pixel_realsize_y = mask_3d[i] / 720 * 1.06
+                     pixel_realsize_x = mask_3d[i] / 1280 * 2.56#1.92
+                     pixel_realsize_y = mask_3d[i] / 720 * 1.44#1.06
                      x_extent = math.sqrt((rec1[0] - rec3[0]) ** 2 + (rec1[1] - rec3[1]) ** 2)
                      y_extent = math.sqrt((rec2[0] - rec4[0]) ** 2 + (rec2[1] - rec4[1]) ** 2)
+                     print(x_extent,y_extent)
                      distance_x = (x_extent) * pixel_realsize_x
                      distance_y = (y_extent) * pixel_realsize_y
-                     distance_string = "{3}:{2}  v:{0:.2f},h{1:.2f}".format(distance_x,distance_y,index,label)
-                     sendImage.send_info(i,label, distance_x,distance_y)#+
+                     distance_string = "{3}:{2}  x:{0:.2f},y{1:.2f},D:{4:.2f}".format(distance_x,distance_y,index,self.CATEGORIES[label],mask_3d[i])
+                     #sendImage.send_info(i,label, distance_x,distance_y)#+
                      print(distance_string)
 
             thresh = mask[0, :, :, None].astype(np.uint8)
