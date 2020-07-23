@@ -8,7 +8,11 @@ The ZED SDK can be interfaced with Pytorch for adding 3D localization of custom 
 </p>
 
 # Installation
+###how to use
 
+```
+sudo python3 annotation4.py --sendData True --config-file "configs/e2e_mask_rcnn_X_101_32x8d_FPN_1x.yaml"
+```
 ## Dependencies
 
 The 3D Object Detection project depends on the following libraries:
