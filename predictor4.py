@@ -316,7 +316,8 @@ class COCODemo(object):
 
         return image
 
-    def overlay_mask(self, image, predictions,mask_3d):
+    def overlay_mask(self, image, predictions,mask_3d,sendData):
+        sendFlag = False
         """
         Adds the instances contours for each predicted object.
         Each label has a different color.
@@ -383,7 +384,9 @@ class COCODemo(object):
                             distance_x = (x_extent) * pixel_realsize_x
                             distance_y = (y_extent) * pixel_realsize_y
                             distance_string = "{3}:{2}  x:{0:.2f},y{1:.2f},D:{4:.2f}".format(distance_x,distance_y,index,self.CATEGORIES[label],mask_3d[i])
-                            #sendImage.send_info(i,label, distance_x,distance_y)#+
+                            if sendData:
+                             sendImage.send_info(i,label, distance_x,distance_y)#+
+                             sendFlag = True
                             print(distance_string)
                         else:
                             print("invalid aspect ratio!!")
@@ -399,7 +402,7 @@ class COCODemo(object):
 
         composite = image
 
-        return composite
+        return composite, sendFlag
 
     def overlay_keypoints(self, image, predictions):
         keypoints = predictions.get_field("keypoints")
