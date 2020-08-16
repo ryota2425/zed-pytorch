@@ -365,6 +365,7 @@ class COCODemo(object):
                      rect = cv2.minAreaRect(contours[i])
                      angle = round(rect[2],1)
                      print(angle)
+                     print(mask_3d[index])
                      if angle < 10 and angle > -10:
                         box = cv2.boxPoints(rect)
                         box = np.int0(box)
@@ -372,7 +373,7 @@ class COCODemo(object):
                         rec2 = [int((box[1][0] + box[2][0])/2),int((box[1][1]+box[2][1])/2)]
                         rec3 = [int((box[2][0] + box[3][0])/2),int((box[2][1]+box[3][1])/2)]
                         rec4 = [int((box[0][0] + box[3][0])/2),int((box[0][1]+box[3][1])/2)]
-                        image = cv2.drawContours(image,[box],0,(0,0,255),2)
+                        image = cv2.drawContours(image,[box],0,(0,255,255),1)
                         cv2.line(image, (rec1[0], rec1[1]), (rec3[0], rec3[1]), (255, 255, 255), thickness=1, lineType=cv2.LINE_AA)
                         cv2.line(image, (rec2[0], rec2[1]), (rec4[0], rec4[1]), (255, 255, 255), thickness=1, lineType=cv2.LINE_AA)
                         pixel_realsize_x = mask_3d[index] / 1280 * 2.56#1.92

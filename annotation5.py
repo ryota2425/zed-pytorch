@@ -3,7 +3,7 @@ import argparse
 import cv2
 
 from maskrcnn.config import cfg
-from predictor4 import COCODemo
+from predictor5 import COCODemo
 from maskrcnn.structures.keypoint import PersonKeypoints
 
 import time
@@ -322,7 +322,7 @@ def main():
             if sendFlag:
                  sendImage.send_image(composite)
 
-        print(" TotalTime: {:.2f} s".format(time.time() - start_time))
+        #print(" TotalTime: {:.2f} s".format(time.time() - start_time))
 
         if display:
             cv2.imshow("COCO detections", composite)

@@ -51,7 +51,7 @@ class COCODemo(object):
     # COCO categories for pretty print
     CATEGORIES = [
         "__background",
-        "goldfish",
+        "people",
         "bicycle",
         "car",
         "motorcycle",
@@ -223,6 +223,7 @@ class COCODemo(object):
             result = self.overlay_mask(result, top_predictions)
         if self.cfg.MODEL.KEYPOINT_ON:
             result = self.overlay_keypoints(result, top_predictions)
+            
         result = self.overlay_class_names(result, top_predictions)
 
         return result
@@ -316,84 +317,27 @@ class COCODemo(object):
 
         return image
 
-    def overlay_mask(self, image, predictions,mask_3d,sendData):
-        sendFlag = False
+    def overlay_mask(self, image, predictions,mask_3d):
         """
         Adds the instances contours for each predicted object.
         Each label has a different color.
-
         Arguments:
             image (np.ndarray): an image as returned by OpenCV
             predictions (BoxList): the result of the computation by the model.
                 It should contain the field `mask` and `labels`.
         """
-
-
-
+        
         masks = predictions.get_field("mask").numpy()
         labels = predictions.get_field("labels")
 
         colors = self.compute_colors_for_labels(labels).tolist()
-        labels = labels.tolist()
-        #labels = [self.CATEGORIES[i] for i in labels]##もしカテゴリー名が欲しい時は戻す
 
-        for index, (mask, color,label) in enumerate(zip(masks, colors,labels)):
+        for mask, color in zip(masks, colors):
             thresh = mask[0, :, :, None].astype(np.uint8)
             contours, hierarchy = cv2_util.findContours(
                thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE
             )
-
-            if mask_3d[index] > 2.0:
-                print(mask_3d[index])
-                continue
-
-            image = cv2.drawContours(image, contours, -1, color, 2)
-            #-for i in range(0, len(contours)):
-            for i in range(0, 1):
-                    if len(contours[i]) > 0:
-                            # remove small objects
-                     if cv2.contourArea(contours[i]) < 500: 
-                         continue
-                     ##Nanとinfチェック
-                     ##pixel_realsize_x = mask_3d[i] / 1280 * 1.92のところでinfの場合止まってしまう
-                     #valがinf,Nanだったときの処理を書く
-                     val = mask_3d[index]
-                     inf = float("inf")
-                     if val == inf or val != val:
-                            mask_3d[index] = 0
-
-                     rect = cv2.minAreaRect(contours[i])
-                     angle = round(rect[2],1)
-                     print(angle)
-                     if angle < 10 and angle > -10:
-                        box = cv2.boxPoints(rect)
-                        box = np.int0(box)
-                        rec1 = [int((box[0][0] + box[1][0])/2),int((box[0][1]+box[1][1])/2)]
-                        rec2 = [int((box[1][0] + box[2][0])/2),int((box[1][1]+box[2][1])/2)]
-                        rec3 = [int((box[2][0] + box[3][0])/2),int((box[2][1]+box[3][1])/2)]
-                        rec4 = [int((box[0][0] + box[3][0])/2),int((box[0][1]+box[3][1])/2)]
-                        image = cv2.drawContours(image,[box],0,(0,0,255),2)
-                        cv2.line(image, (rec1[0], rec1[1]), (rec3[0], rec3[1]), (255, 255, 255), thickness=1, lineType=cv2.LINE_AA)
-                        cv2.line(image, (rec2[0], rec2[1]), (rec4[0], rec4[1]), (255, 255, 255), thickness=1, lineType=cv2.LINE_AA)
-                        pixel_realsize_x = mask_3d[index] / 1280 * 2.56#1.92
-                        pixel_realsize_y = mask_3d[index] / 720 * 1.44#1.06
-                        x_extent = math.sqrt((rec1[0] - rec3[0]) ** 2 + (rec1[1] - rec3[1]) ** 2)
-                        y_extent = math.sqrt((rec2[0] - rec4[0]) ** 2 + (rec2[1] - rec4[1]) ** 2)
-                        #print(x_extent,y_extent)
-                        if x_extent > y_extent*2:
-                            distance_x = (x_extent) * pixel_realsize_x
-                            distance_y = (y_extent) * pixel_realsize_y
-                            distance_string = "{3}:{2}  x:{0:.2f},y{1:.2f},D:{4:.2f}".format(distance_x,distance_y,index,self.CATEGORIES[label],mask_3d[i])
-                            if sendData:
-                             sendImage.send_info(i,label, distance_x,distance_y)#+
-                             sendFlag = True
-                            print(distance_string)
-                        else:
-                            print("invalid aspect ratio!!")
-                     else:
-                         pass
-
-
+            image = cv2.drawContours(image, contours, -1, (0,0,0), 2)
             thresh = mask[0, :, :, None].astype(np.uint8)
             redImg = np.zeros(image.shape, image.dtype)
             redImg[:, :] = color
@@ -402,7 +346,7 @@ class COCODemo(object):
 
         composite = image
 
-        return composite, sendFlag
+        return composite
 
     def overlay_keypoints(self, image, predictions):
         keypoints = predictions.get_field("keypoints")
@@ -469,7 +413,7 @@ class COCODemo(object):
             x, y = box[:2]
             s = template.format(label, score)
             cv2.putText(
-                image, s, (x, y), cv2.FONT_HERSHEY_SIMPLEX, .6, (255, 255, 255), 1
+                image, s, (x, y), cv2.FONT_HERSHEY_SIMPLEX, .6, (255, 255, 255), 2
             )
 
         return image

@@ -3,7 +3,7 @@ import argparse
 import cv2
 
 from maskrcnn.config import cfg
-from predictor4 import COCODemo
+from soracom_predictor3 import COCODemo
 from maskrcnn.structures.keypoint import PersonKeypoints
 
 import time
@@ -11,7 +11,10 @@ import torch
 import pyzed.sl as sl
 import numpy as np
 import math
-import sendImage 
+
+import importlib 
+
+
 
 
 def get_humans3d(prediction, depth):
@@ -118,13 +121,13 @@ def showimage(prediction, depth):
     masks = []
     #print(prediction.type)
     #print(prediction)
-    #print(prediction.get_field("mask").numpy())
+    print(prediction.get_field("mask").numpy())
     masks = prediction.get_field("mask").numpy()
     np_depth_flat = np.array(depth.get_data()).flatten()
 
     for mask in masks:
-        #print(mask)
-        #print(mask.shape)
+        print(mask)
+        print(mask.shape)
         thresh = np.array(np.squeeze(mask[0, :, :]).astype(bool)).flatten()
         x = np_depth_flat[thresh > 0]
         
@@ -155,11 +158,12 @@ def overlay_distances(prediction, boxes_3d, image, skeletons_3d=None, masks_3d=N
             image = cv2.circle(image, (i, j), 5, (255, 0, 0), -1)
 
         image = cv2.putText(image, str(str("{0:.2f}".format(round(dist, 2))) + " m"), (i, j),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 3)
 
 
 def main():
-    print("version 3.0")
+    
+    print("version 2.1_SoracomIntern")
     parser = argparse.ArgumentParser(description="PyTorch Object Detection Webcam Demo")
     parser.add_argument(
         "--config-file",
@@ -204,11 +208,10 @@ def main():
         default=None
     )
     parser.add_argument(
-        "--sendData",
-        help="sendDatatoServer",
-        default=False
+        "--baseImage",
+        help="backgroundImage",
+        default=None
     )
-
     args = parser.parse_args()
 
     # load config from file and command-line arguments
@@ -262,23 +265,17 @@ def main():
         exit(1)
 
     running = True
-    keep_people_only = False
+    keep_people_only = True
 
     if coco_demo.cfg.MODEL.MASK_ON:
         print("Mask enabled!!")
     if coco_demo.cfg.MODEL.KEYPOINT_ON:
         print("Keypoints enabled!")
-    start_time = time.time()
+
     while running:
-        #print(" LastTime-ThisTime: {:.2f} s".format(time.time() - start_time))
         start_time = time.time()
         err_code = cap.grab(runtime)
-        #+
-        if err_code == sl.ERROR_CODE.END_OF_SVOFILE_REACHED:
-            print("SVO end has been reached. Looping back to first frame")
-            cap.set_svo_position(0)
-        elif err_code != sl.ERROR_CODE.SUCCESS:
-            print(err_code)
+        if err_code != sl.ERROR_CODE.SUCCESS:
             break
 
         cap.retrieve_image(left, sl.VIEW.LEFT, resolution=res)
@@ -288,9 +285,7 @@ def main():
         ptcloud_np = np.array(ptcloud.get_data())
 
         img = cv2.cvtColor(left.get_data(), cv2.COLOR_RGBA2RGB)
-        #print(" ImagegetTime: {:.2f} s".format(time.time() - start_time))
         prediction = coco_demo.select_top_predictions(coco_demo.compute_prediction(img))
-        #print(" predictionTime: {:.2f} s".format(time.time() - start_time))
 
         # Keep people only
         if keep_people_only:
@@ -300,6 +295,17 @@ def main():
             prediction = prediction[keep]
 
         composite = img.copy()
+        
+        if args.baseImage:
+            height, width = img.shape[:-1]
+            #prediction = prediction.resize((width, height))
+            try:
+                img = cv2.imread(args.baseImage)
+                composite = cv2.resize(img, dsize=(width, height), interpolation=cv2.INTER_CUBIC)
+            except:
+                print("There is not :" + args.baseImage)
+            
+        
         humans_3d = None
         masks_3d = None
         if coco_demo.show_mask_heatmaps:
@@ -308,21 +314,23 @@ def main():
         if coco_demo.cfg.MODEL.MASK_ON:
             masks_3d = get_masks3d(prediction, depth)
             #maskimage = showimage(prediction, depth)
-            composite, sendFlag = coco_demo.overlay_mask(composite, prediction,masks_3d,args.sendData)
+            composite = coco_demo.overlay_mask(composite, prediction,masks_3d)
+            print(len(masks_3d))
+            composite = coco_demo.overlay_totalpeoplenum(composite, prediction,masks_3d)
         if coco_demo.cfg.MODEL.KEYPOINT_ON:
             # Extract 3D skeleton from the ZED depth
+            #composite = coco_demo.overlay_mask(composite, prediction,masks_3d)
+
             humans_3d = get_humans3d(prediction, ptcloud_np)
+            #composite = coco_demo.overlay_mask(composite, prediction,masks_3d)
             composite = coco_demo.overlay_keypoints(composite, prediction)
-            #print(" 3DpredictTime: {:.2f} s".format(time.time() - start_time))
         if True:
+            
             #print(masks_3d)
             overlay_distances(prediction, get_boxes3d(prediction, ptcloud_np), composite, humans_3d, masks_3d)
             composite = coco_demo.overlay_class_names(composite, prediction)
-            #条件を満たした物体が写ったフレームを判定するフラグ
-            if sendFlag:
-                 sendImage.send_image(composite)
 
-        print(" TotalTime: {:.2f} s".format(time.time() - start_time))
+        print(" Time: {:.2f} s".format(time.time() - start_time))
 
         if display:
             cv2.imshow("COCO detections", composite)
