@@ -1,5 +1,6 @@
 # 3D Mask R-CNN using the ZED and Pytorch
 
+
 The ZED SDK can be interfaced with Pytorch for adding 3D localization of custom objects detected with MaskRCNN. In this Python 3 sample, we will show you how to detect, segmente, classify and locate objects in 3D space using the ZED stereo camera and Pytorch.
 
 <!---  ![alt text](ZED_demo.jpg) --->
@@ -13,6 +14,13 @@ The ZED SDK can be interfaced with Pytorch for adding 3D localization of custom 
 ```
 sudo python3 annotation4.py --sendData True --config-file "configs/e2e_mask_rcnn_X_101_32x8d_FPN_1x.yaml"
 ```
+```
+cd Desktop/zed-pytorch/
+sudo python3 Desktop/zed-pytorch/annotation4.py --sendData True --config-file "configs/e2e_mask_rcnn_X_101_32x8d_FPN_1x.yaml"
+```
+
+- receiver2.pyがxaviernxからデータを受信してelasticに登録するプログラム
+
 ## Dependencies
 
 The 3D Object Detection project depends on the following libraries:

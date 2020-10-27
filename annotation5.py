@@ -12,6 +12,8 @@ import pyzed.sl as sl
 import numpy as np
 import math
 import sendImage 
+from datetime import datetime
+import os
 
 
 def get_humans3d(prediction, depth):
@@ -107,7 +109,8 @@ def get_masks3d(prediction, depth):
     for mask in masks:
         thresh = np.array(np.squeeze(mask[0, :, :]).astype(bool)).flatten()
         x = np_depth_flat[thresh > 0]
-        cv2.imshow("a",x)
+        #深度画像
+        #cv2.imshow("a",x)
         object_dist = np.nanmedian(x[np.isfinite(x)])
         masks_3d.append(object_dist)
 
@@ -156,6 +159,50 @@ def overlay_distances(prediction, boxes_3d, image, skeletons_3d=None, masks_3d=N
 
         image = cv2.putText(image, str(str("{0:.2f}".format(round(dist, 2))) + " m"), (i, j),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+
+def save_image(img):
+    # データの変換処理
+    # data = request.data.decode('utf-8')
+    # data_json = json.loads(data)
+    # image = data_json['image']
+    # image_dec = base64.b64decode(image)
+    # data_np = np.fromstring(image_dec, dtype='uint8')
+    # decimg = cv2.imdecode(data_np, 1)
+    #画像を保存
+       #西暦と月のフォルダを作成
+    nowtime = datetime.now()
+    savedir = os.getcwd()
+
+
+    if not os.path.exists(os.path.join(savedir)):
+        os.mkdir(os.path.join(savedir))
+        print("MAKE_DIR: " + savedir)
+    #年のフォルダを作成
+    savedir += datetime.now().strftime("/%Y")
+    if not os.path.exists(os.path.join(savedir)):
+        os.mkdir(os.path.join(savedir))
+        print("MAKE_DIR: " + savedir)
+    #月のフォルダ作成
+    savedir += nowtime.strftime("/%m")
+    if not os.path.exists(os.path.join(savedir)):
+        os.mkdir(os.path.join(savedir))
+        print("MAKE_DIR: " + savedir)
+
+    #日のフォルダを生成
+    savedir += nowtime.strftime("/%d")
+    if not os.path.exists(os.path.join(savedir)):
+        os.mkdir(os.path.join(savedir))
+        print("MAKE_DIR: " + savedir)
+
+    # 時間_分_秒のフォルダを生成
+
+    savefile = savedir
+
+    saveFileName = datetime.now().strftime("%Y%m%d_%H%M%S.png")
+    saveFileName = os.path.join(savedir, saveFileName)
+    cv2.imwrite(saveFileName, img)
+    print(str(savedir) +"に保存しました")
+    
 
 
 def main():
@@ -320,14 +367,17 @@ def main():
             composite = coco_demo.overlay_class_names(composite, prediction)
             #条件を満たした物体が写ったフレームを判定するフラグ
             if sendFlag:
-                 sendImage.send_image(composite)
+                save_image(img)
+                #sendImage.send_image(composite)
 
         #print(" TotalTime: {:.2f} s".format(time.time() - start_time))
 
         if display:
-            cv2.imshow("COCO detections", composite)
+            imS = cv2.resize(composite, (480*2, 270*2))                    # Resize image
+            #cv2.imshow("output", imS)                            # Show image
+            cv2.imshow("COCO detections", imS)
             #cv2.imshow("mask",maskimage[0])
-            cv2.imshow("ZED Depth", depth_img.get_data())
+            #cv2.imshow("ZED Depth", depth_img.get_data())
             key = cv2.waitKey(10)
             if key == 27:
                 break  # esc to quit
