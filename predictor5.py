@@ -11,7 +11,12 @@ from maskrcnn_benchmark import layers as L
 from maskrcnn_benchmark.utils import cv2_util
 import math
 import sendImage 
+import json
+import requests
+from elasticsearch import Elasticsearch
+import time
 
+es = Elasticsearch(host='133.19.62.11', port=9200,http_auth=('elastic','InfoNetworking'))
 
 class Resize(object):
     def __init__(self, min_size, max_size):
@@ -220,7 +225,7 @@ class COCODemo(object):
             return self.create_mask_montage(result, top_predictions)
         result = self.overlay_boxes(result, top_predictions)
         if self.cfg.MODEL.MASK_ON:
-            result = self.overlay_mask(result, top_predictions)
+            result,temp = self.overlay_mask(result, top_predictions)
         if self.cfg.MODEL.KEYPOINT_ON:
             result = self.overlay_keypoints(result, top_predictions)
         result = self.overlay_class_names(result, top_predictions)
@@ -293,6 +298,25 @@ class COCODemo(object):
         colors = (colors % 255).numpy().astype("uint8")
         return colors
 
+    def send_info(self,id,categories,ver,hor):
+        # 画像を送信可能な形式に変換してJSONに格納
+        sendjson = {}
+        sendjson["date"] = time.time() * 1000 
+        sendjson["id"] = id
+        sendjson["horizon"] = hor * 100
+        #forecast["prob-precip"] = float(prob_precip[itr].text.strip())
+        sendjson["vertical"] = ver * 100
+        sendjson["categories"] = categories
+        outdata = json.dumps(sendjson)
+        # HTTPリクエストを痩身
+        try:
+          res = es.index(index="aquaponics", doc_type='fish', body=outdata)
+          #print(res)
+        except Exception as e:
+          print(e)
+        #print("sendInfoFin")
+
+
     def overlay_boxes(self, image, predictions):
         """
         Adds the predicted boxes on top of the image
@@ -344,7 +368,7 @@ class COCODemo(object):
             )
 
             if mask_3d[index] > 2.0:
-                print(mask_3d[index])
+                #(mask_3d[index])
                 continue
 
             image = cv2.drawContours(image, contours, -1, color, 2)
@@ -364,8 +388,8 @@ class COCODemo(object):
 
                      rect = cv2.minAreaRect(contours[i])
                      angle = round(rect[2],1)
-                     print(angle)
-                     print(mask_3d[index])
+                     #print(angle)
+                     #print(mask_3d[index])
                      if angle < 10 and angle > -10:
                         box = cv2.boxPoints(rect)
                         box = np.int0(box)
@@ -376,21 +400,27 @@ class COCODemo(object):
                         image = cv2.drawContours(image,[box],0,(0,255,255),1)
                         cv2.line(image, (rec1[0], rec1[1]), (rec3[0], rec3[1]), (255, 255, 255), thickness=1, lineType=cv2.LINE_AA)
                         cv2.line(image, (rec2[0], rec2[1]), (rec4[0], rec4[1]), (255, 255, 255), thickness=1, lineType=cv2.LINE_AA)
-                        pixel_realsize_x = mask_3d[index] / 1280 * 2.56#1.92
-                        pixel_realsize_y = mask_3d[index] / 720 * 1.44#1.06
+                        pixel_realsize_x = mask_3d[index] / 1280 * 1.801#1.92#2.56   
+                        pixel_realsize_y = mask_3d[index] / 720 * 1.019#1.06#1.44
                         x_extent = math.sqrt((rec1[0] - rec3[0]) ** 2 + (rec1[1] - rec3[1]) ** 2)
                         y_extent = math.sqrt((rec2[0] - rec4[0]) ** 2 + (rec2[1] - rec4[1]) ** 2)
                         #print(x_extent,y_extent)
                         if x_extent > y_extent*2:
                             distance_x = (x_extent) * pixel_realsize_x
                             distance_y = (y_extent) * pixel_realsize_y
-                            distance_string = "{3}:{2}  x:{0:.2f},y{1:.2f},D:{4:.2f}".format(distance_x,distance_y,index,self.CATEGORIES[label],mask_3d[i])
-                            if sendData:
-                             sendImage.send_info(i,label, distance_x,distance_y)#+
-                             sendFlag = True
-                            print(distance_string)
+                            if distance_x < 20:
+                                distance_string = "{3}:{2}  x:{0:.7f},y{1:.7f},D:{4:.7f}".format(distance_x,distance_y,index,self.CATEGORIES[label],mask_3d[i])
+                                # if sendData:
+                                #  sendImage.send_info(i,label, distance_x,distance_y)#+
+                                #  sendFlag = True
+                                self.send_info(id=i,categories=label,ver=distance_x,hor=distance_y)
+                                print(distance_string)
+                                sendFlag = True
+                            else:
+                                pass        
                         else:
-                            print("invalid aspect ratio!!")
+                            pass
+                            #print("invalid aspect ratio!!")
                      else:
                          pass
 
